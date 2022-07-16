@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="">
+<head>
+    <meta charset="UTF-8">
+    <title>Stereo Camera Depth</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow-x : hidden;
+        }
+        h1{
+            padding: 8px;
+            font-family:Arial, Helvetica, sans-serif
+        }
+        p{
+            padding: 8px;
+            font-size: 1.2em;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        cite{
+            font-family: monospace;
+            margin: 8px;
+            padding-left: 4px;
+            display: block;
+            border-left: solid 3px red;
+        }
+        .square {
+            width:  4px;
+            height: 4px;
+            display: inline-block;
+        }
+        cite.formulas{
+            display: block;
+            font-size: 1.2em;
+            font-family: serif;
+            font-style: oblique;
+            font-weight:  lighter;
+            letter-spacing: -1px;
+        }
+        cite > .big {
+            display: inline;
+            font-size: 1.5rem;
+        }
+    </style>
+    <link href="css/input-range.css" rel="stylesheet">
+    <link href="css/buttons.css" rel="stylesheet">
+    <link href="css/main.css" rel="stylesheet">
+</head>
+<body id="ie6a">
+    <div data-gjs="navbar" class="navbar" id="ivb7">
+      <div class="navbar-container">
+        <a href="/" class="navbar-brand" id="igtk"></a>
+        <div id="ihtu" class="navbar-burger">
+          <div class="navbar-burger-line">
+          </div>
+          <div class="navbar-burger-line">
+          </div>
+          <div class="navbar-burger-line">
+          </div>
+        </div>
+        <div data-gjs="navbar-items" class="navbar-items-c">
+          <nav data-gjs="navbar-menu" class="navbar-menu">
+            <a href="#section-scene" class="navbar-menu-link" id="ihkqq">Scene</a>
+            <a href="#section-cameras" class="navbar-menu-link" id="ipxru">Cameras</a>
+            <a href="#section-formulas" class="navbar-menu-link" id="ik4uk">Formulas<br/></a>
+            <a href="#section-results" class="navbar-menu-link" id="iozll">Results</a>
+          </nav>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="cell" id="i8s8">
+        <div id="section-scene" class="title">Esteem depth  using two cameras
+        </div>
+        <div id="io02vy">This page contains a naive implementation of the depth estimation using a stereo camera algorithm. The code is not made for production nor has been optimized because the main focus is to explain how the algorithm works.
+          <br/>
+          <br/>First thing first what is this algorithm about? On the official 
+          <a href="https://www.intelrealsense.com/stereo-depth-vision-basics/" target="_blank" title="Official Intel site" id="iyc6t8">Intel</a> site we can read:
+        </div>
+        <blockquote class="quote" id="ihna6u">Depth from stereo is a classic computer vision algorithm inspired by the human binocular vision system. It relies on two parallel viewports and calculates depth by estimating disparities between matching keypoints in the left and right images
+          <br/>
+        </blockquote>
+        <div id="ip7wg">To better understand the code let&#039;s create an enviroment with a binocular vision robot and some objects like this:
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="cell">
+        <div id="ih37e">
+          <div id="scene">
+            <div id="iwzx8">
+              Move the white robot with WASD keys. 
+              <br/>
+              Use the mouse to rotate ansd zoom the camera.
+            </div>
+            <canvas id="scene-canvas">
+            </canvas>
+            <fieldset id="ik2ug">
+              <legend>OPTIONS</legend>
+              <button id="toggle-helpers">Toggle Helpers</button>
+              <br/>
+              Number of boxes 
+              <input type="range" min="10" max="50" value="10" id="input-number-boxes"/>
+              <br/>
+              Number of spheres 
+              <input type="range" min="10" max="50" value="10" id="input-number-spheres"/>
+              <br/>
+              Cameras distance 
+              <input type="range" min="0.5" max="3" step="0.01" value="1" id="input-cameras-distance"/>
+              <br/>
+            </fieldset>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="cell">
+        <div id="section-cameras" class="title">Preparing the cameras
+        </div>
+        <div id="ieqbu">In real life scenarios the whole system need to be calibrated. 
+          <br/>In particular is really important that both cameras are aligned and point to the same direction. This step is usually done using a trnaformation matrix that compensate small errors of position and image distortion.
+          <br/>
+          <br/>The cameras on the previous scene are simulated so no compensation has to be done, but this 
+          <a href="https://en.wikipedia.org/wiki/Image_rectification" id="ia5vy6">Wikipedia article</a> explains the process pretty well.
+          <br/>
+          <br/>After the cameras take a shot we can pick a point over the left canvas. That point will be the target we want to esteem how far away is from the robot.
+          <br/>The square around the left pixel is callled 
+          <b>Window
+          </b>, while the rectangle on the left is called 
+          <b>Epipolar line 
+          </b>( it is represented as a rectangle instead of a line to show how different window sizes affect the computations, the real line is a straight horizontal line at the center of the rectangle ).
+        </div>
+      </div>
+    </div>
+    <div id="i5jsj">
+      <button id="capture-cameras">Take image</button>
+    </div>
+    <div class="row">
+      <div class="cell" id="ipp1x">
+        <div id="ix65g">
+          <div id="iy2y8">
+            <div id="iquk9">
+              Use the scroll wheel to change the window size
+            </div>
+            <canvas id="camera-left">
+            </canvas>
+            <canvas id="camera-right">
+            </canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="cell" id="ihmmm">
+        <div id="i4g2x">Now that we chose a pixel on the left image se have to find the sameon the right one.
+          <br/>
+          <br/>There are different algorithm to find the pixel and allof them compares the right window with all the possible windows moving along the epipolar line. As anyone can expect finding the right window size is like finding a good compromise between precision and speed.
+          <br/>
+          <br/>The formulas used in this example are the 
+          <b>sum 
+            <br/>squared difference
+          </b> and the 
+          <b id="ijk8px">sum absolute difference
+          </b>:
+          <br/>
+        </div>
+        <div id="iwhtwr">
+          <div id="iczoqn">
+            <font face="Times New Roman" size="3" id="igpddm">$$ SSD(x) = \sum \sum ( L(r, c) - R(r + x, c) ) ^ 2 $$
+            </font>
+        </div>
+          <div id="ildl0k">
+            <font face="Times New Roman" size="3" id="ifjjq6">$$ SAD(x) = \sum \sum | L(r, c) - R(r + x, c) | $$
+              <br/>
+            </font>
+        </div>
+        </div>
+        <div id="ic5rry">Then  we chose the value of x that minimizes the difference score.
+          <br/>If multiple x scores the same minimum value then this algorithm chooses to take only the first one. More advanced algorithm make take in considderation corners and other shapes to identify better the point.
+          <br/>
+          <br/>Now that we have both coordinates of the point in the images we can use geometry to calculate at what distance the obejct should be.
+        </div>
+      </div>
+      <div class="cell" id="i81hl">
+        <div id="imfe7">
+          <div id="ibcnb">
+            <div id="ingug">
+              <div class="square" id="iti6o">
+              </div> sum squared difference
+              <br/>
+              <div class="square" id="iiuu4">
+              </div> sum absolute difference
+            </div>
+            <svg id="window-differences">
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="cell" id="ifjkx">
+        <div id="section-formulas" class="title">The formula
+        </div>
+        <div id="i8h6y">The brach of geometry that studies how stereo camera works is called 
+          <b>epipolar geometry
+          </b>. 
+          <br/>The geometry assert that given the distance between cameras, called 
+          <b>baseline
+          </b>, and the focal length of the cameras, the formula for the distance can be retrieved seeing which triangles are similar:
+        </div>
+      </div>
+    </div>
+    <div class="row" id="i5jzk">
+      <div class="cell" id="i4t27">
+        <div id="i8h5h">
+        </div>
+        <div id="i0tck">
+        </div>
+        <div id="i62j9">
+        </div>
+        <div id="ighj31">Similar triangles have same color when mouse is hover
+        </div>
+        <div id="ifrax">
+          <svg viewBox="0 0 100 100" width="50vmin" height="50vmin" id="isnhy">
+            <circle cx="25" cy="90" r="1">
+            </circle>
+            <circle cx="75" cy="90" r="1">
+            </circle>
+            <circle cx="60" cy="10" r="1">
+            </circle>
+            <circle cx="55.75" cy="20" r="1">
+            </circle>
+            <circle cx="51.25" cy="30" r="1">
+            </circle>
+            <line x1="75" y1="90" x2="55.75" y2="20" id="iuvny1">
+            </line>
+            <line x1="75" y1="90" x2="51.25" y2="30" id="ip89oh">
+            </line>
+            <circle cx="31.75" cy="75" r="1">
+            </circle>
+            <line x1="15" y1="75" x2="85" y2="75" id="i7rase">
+            </line>
+            <line x1="25" y1="90" x2="25" y2="75" id="iubavu">
+            </line>
+            <line x1="75" y1="90" x2="75" y2="75" id="i9hpps">
+            </line>
+            <text x="-95" y="23" id="inayam">Focal length
+            </text>
+            <rect x="15" y="70" width="20" height="10" id="ijgwba">
+            </rect>
+            <rect x="65" y="70" width="20" height="10" id="ibjt6l">
+            </rect>
+            <line x1="25" y1="90" x2="60" y2="10" id="i0mjdr">
+            </line>
+            <line x1="75" y1="90" x2="60" y2="10" id="i263vl">
+            </line>
+            <line x1="25" y1="90" x2="75" y2="90" id="i62c0d">
+            </line>
+            <text x="45" y="95" id="i2fv3t">Baseline
+            </text>
+            <line x1="60" y1="10" x2="60" y2="90" id="i5ldah">
+            </line>
+            <text x="-89" y="58" id="i3wkcj">Distance
+            </text>
+            <path d="M 25,90, L25,75 L31.5,75 z" style="stroke: none; fill-opacity: var(--triangles, 0); fill: orange;" 
+                  onmouseenter="this.parentElement.style.setProperty('--triangles', 1);"
+                  onmouseleave="this.parentElement.style.setProperty('--triangles', 0);">
+            </path>
+            <path d="M 25,90, L60,10 L60,90 z" style="stroke: none; fill-opacity: var(--triangles, 0); fill: orange;" 
+                  onmouseenter="this.parentElement.style.setProperty('--triangles', 1);"
+                  onmouseleave="this.parentElement.style.setProperty('--triangles', 0);">
+            </path>
+            <path d="M 75,90, L75,75 L72.5,75 z" style="stroke: none; fill-opacity: var(--triangles2, 0); fill: lightskyblue;" 
+                  onmouseenter="this.parentElement.style.setProperty('--triangles2', 1);"
+                  onmouseleave="this.parentElement.style.setProperty('--triangles2', 0);">
+            </path>
+            <path d="M 60,90, L60,10 L75,90 z" style="stroke: none; fill-opacity: var(--triangles2, 0); fill: lightskyblue;" 
+                  onmouseenter="this.parentElement.style.setProperty('--triangles2', 1);"
+                  onmouseleave="this.parentElement.style.setProperty('--triangles2', 0);">
+            </path>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div id="ixll22">So the distance can be calculated as: $$ d = \frac{baseline * focallength}{pixelsize * (x_l - x_r)}$$
+      <br/>
+      <br/>
+    </div>
+    <div class="row">
+      <div class="cell" id="io0uj">
+        <div id="section-results" title="" class="title">Results
+        </div>
+        <div id="iasxkf">Sqaured  algorithm: 
+          <span id="result-squared"></span>.
+          <br/>
+          Absolute algorithm: 
+          <span id="result-absolute"></span>.
+        </div>
+      </div>
+    </div>
+    <script src="js/Window.js"async defer></script>
+    <script src="js/calculateDepth.js" async defer></script>
+    <script src="build/DepthEstimator.js"async defer></script>
+    <script src="js/findClosestWindow.js"async defer></script>
+    <script src="js/robotControls.js"async defer></script>
+    <script src="js/populateScene.js" async defer></script>
+    <script src="js/readPixelFromCanvas.js" async defer></script>
+    <script src="js/pickPointInLeftCanvas.js" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.0/build/three.min.js"></script>
+    <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+    <script src="js/robot.js"></script>
+    <script src="js/init.js"></script>
+    <script src='https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
+    <script>
+    window.addEventListener("load", () => {
+        
+    MathJax.Hub.Config({
+            tex2jax: {
+                inlineMath: [['$','$'], ['\\(','\\)']]}}
+        );
+    });
+    </script>
+</body>
+</html>
+
+
